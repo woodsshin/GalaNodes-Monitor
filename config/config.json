@@ -1,0 +1,29 @@
+{
+    "settings" : {
+        "webhookurl": "your discord webhook url",
+        "monitorinterval" : 90,
+        "regularreportinterval" : 3600,
+        "discordnotifysnooze" : 600,
+        "errortolerance" : 3
+    },
+    "servers" : [
+        {
+            "name" : "your server name 1",
+            "address" : "your server address",
+            "port" : 22,
+            "username" : "ubuntu",
+            "password" : "",
+            "privatekeypath" : "",
+            "nodes" : ["founders", "townstar"]
+        },
+        {
+            "name" : "your server name 2",
+            "address" : "your server address",
+            "port" : 22,
+            "username" : "ubuntu",
+            "password" : "",
+            "privatekeypath" : "",
+            "nodes" : ["founders", "townstar"]
+        }
+    ]
+}
