@@ -64,7 +64,7 @@ It's common settings on all nodes.
 - **_nodes_** : prints the current status of nodes.
 - **_find [key]_** : find nodes which have a key in name, address, machine ID.
 - **_save_** : output nodes information to output.csv.
-- **_cls_** : clear screen/
+- **_cls_** : clear screen
 - **_stats_** : run "gala-node stats" on all nodes.
 - **_restart [index|address]_** : run "sudo systemctl restart gala-node" on a gala node or all nodes. The index is non zero based in nodes commands.
 - **_reboot [index|address|all]_** : reboot operating system of a node or all nodes. The index is non zero based. The index is non zero based in nodes commands.
@@ -76,5 +76,5 @@ GalaNodes Monitor is provided under the [MIT License](https://github.com/woodssh
 - Email : **_woods.shin1014@gmail.com_**
 # Donation
 - You can find more tools here. Your support is helpful to operate background programs for these tools.
-- https://www.buymeacoffee.com/alpaca007\
+- https://www.buymeacoffee.com/alpaca007
 ![This is an image](https://cdn.buymeacoffee.com/uploads/project_updates/2022/04/7b1182aa7d3b5da8f943eed203468856.png@1200w_0e.webp)
