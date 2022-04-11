@@ -170,7 +170,7 @@ func printSummary(discordReport bool) {
 	log.Println(report)
 
 	if discordReport {
-		report = fmt.Sprintf("founders : %v/%v\\ttotal online nodes : %v\\ntownstar : %v/%v\\ttotal online nodes : %v",
+		report = fmt.Sprintf("founders : %v/%v online nodes : %v\\ntownstar : %v/%v online nodes : %v",
 			onlineFoundersNodes, monitoringFoundersNodes, totalOnlineFoundersNodes,
 			onlineTownNodes, monitoringTownNodes, totalOnlineTownNodes)
 
