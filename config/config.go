@@ -4,7 +4,6 @@
 package config
 
 import (
-	"galamonitor/galanodes"
 	"log"
 
 	"github.com/spf13/viper"
@@ -81,7 +80,7 @@ func GetNodeConfig() (NodeConfig, error) {
 
 	for k, v := range config.Servers {
 		if len(v.Nodes) == 0 {
-			v.Nodes = append(v.Nodes, galanodes.NodeTypeFounders)
+			v.Nodes = append(v.Nodes, "founders")
 			config.Servers[k] = v
 			log.Printf("Monitoring nodes is empty. Added founders as a default to %v(%v)", v.Name, v.Address)
 		}
