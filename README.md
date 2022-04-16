@@ -9,7 +9,7 @@ This tool is to operate and manage multiple Gala Games(GALA) nodes including Fou
 - [x] Notify error state
 - [x] Remote commands(stats, restart nodes, reboot OS, etc)
 ### Stage 2
-- [ ] Restart nodes or reboot OS when it meets specific conditions.
+- [x] Restart nodes or reboot OS when it meets specific conditions.
 - [ ] Save encrypted username and password of nodes(currently saved in plain text)
 - [ ] Collect nodes resources(CPU, memory, network bandwith, etc.)
 ### Stage 3
