@@ -26,7 +26,10 @@ It's common settings on all nodes.
         "monitorinterval" : 90,
         "regularreportinterval" : 3600,
         "discordnotifysnooze" : 600,
-        "errortolerance" : 3
+        "errortolerance" : {
+            "Count" : 3,
+            "Command" : "sudo reboot"
+        }
     },
  ```
 - **_webhookurl_** : the webhook url which you want to notify nodes errors.
@@ -36,7 +39,10 @@ It's common settings on all nodes.
 - **_regularreportinterval_** : notify nodes state every **_regularreportinterval_** seconds.\
 ![This is an image](https://blogfiles.pstatic.net/MjAyMjA0MTBfMTk5/MDAxNjQ5NTU3Nzg3NjYx.3xJ8PzpFzHC_D45d9M6OUdBjr1ioaGSCMNNCyOj9i-og.-9UXaO3jQY5YvLxsJWNc5nRSMrKZkXDIFpmSwJ1U_Xkg.PNG.wcgclan/NodeReport.png)
 - **_discordnotifysnooze_** : snooze discord notification for **_discordnotifysnooze_** seconds once it's done.
-- **_errortolerance_** : notify discord when an error occurs **_errortolerance_** times in a row.<br />
+- **_errortolerance_**<br />
+  - **_Count_** : notify discord when an error occurs **_errortolerance_** times in a row.<br />
+  - **_Command_** : run a custom command("_**sudo reboot**_") when an error occurs **_errortolerance_** times in a row.<br />
+
 **Servers**<br />
  ```
 {
