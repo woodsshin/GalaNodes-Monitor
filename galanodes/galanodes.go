@@ -206,7 +206,7 @@ func reportNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSe
 	nodeInfo.Summary.ErrorCount = preNodeInfo.Summary.ErrorCount + 1
 
 	if len(reason) > 0 {
-		fmt.Printf("\n%v. %v(%v)%v error count %v\n", idx, nodesetting.Name, nodesetting.Address, reason, nodeInfo.Summary.ErrorCount)
+		fmt.Printf("\n%v. %v(%v) %v error count %v\n", idx, nodesetting.Name, nodesetting.Address, reason, nodeInfo.Summary.ErrorCount)
 	}
 
 	nodeMap[nodesetting.Address] = nodeInfo
@@ -465,7 +465,7 @@ func runSSHCmd(cmd string, nodesetting nodeconfig.NodeSettings) (bool, string, [
 	defer client.Close()
 
 	ctx := context.Background()
-	// create a context with timeout, if supplied in the argumetns
+	// create a context with timeout, if supplied in the arguments
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
@@ -544,8 +544,7 @@ func runCustomCmd(idx int, cmd string, nodesetting nodeconfig.NodeSettings) {
 	if cmd == CmdRestartGalaNode {
 		fmt.Println("")
 
-		message := fmt.Sprintf("%v(%v) restarted", nodesetting.Name, nodesetting.Address)
-		log.Println(message)
+		log.Printf("%v. %v(%v) restarted", idx, nodesetting.Name, nodesetting.Address)
 
 		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Restarted Gala nodes\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
 			idx, nodesetting.Name, nodesetting.Address,
@@ -556,8 +555,7 @@ func runCustomCmd(idx int, cmd string, nodesetting nodeconfig.NodeSettings) {
 	} else if cmd == CmdReboot {
 		fmt.Println("")
 
-		message := fmt.Sprintf("%v(%v) rebooted", nodesetting.Name, nodesetting.Address)
-		log.Println(message)
+		log.Printf("%v. %v(%v) rebooted", idx, nodesetting.Name, nodesetting.Address)
 
 		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Rebooted operating system\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
 			idx, nodesetting.Name, nodesetting.Address,
@@ -571,13 +569,12 @@ func runCustomCmd(idx int, cmd string, nodesetting nodeconfig.NodeSettings) {
 	} else {
 		fmt.Println("")
 
-		message := fmt.Sprintf("%v(%v) : run command \"%v\"", nodesetting.Name, nodesetting.Address, cmd)
-		log.Println(message)
+		log.Printf("%v. %v(%v) : run command \"%v\"", idx, nodesetting.Name, nodesetting.Address, cmd)
 		log.Printf("out : %v", string(out))
 
 		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"run command : %v\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
 			cmd, idx, nodesetting.Name, nodesetting.Address,
-			nodeInfo.Summary.CurrentVersion, ConnectionRebooted)
+			nodeInfo.Summary.CurrentVersion, nodeInfo.Summary.State)
 
 		sendDiscordMessage(embedString)
 	}
