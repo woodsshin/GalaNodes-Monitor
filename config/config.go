@@ -9,13 +9,19 @@ import (
 	"github.com/spf13/viper"
 )
 
+// ErrorTolerance ...
+type ErrorTolerance struct {
+	Count   int    `json:"count"`
+	Command string `json:"command"`
+}
+
 // BotSettings ...
 type BaseSettings struct {
-	WebHookUrl            string `json:"webhookurl"`
-	MonitorInterval       int    `json:"interval"`
-	RegularReportInterval int    `json:"regularreportinterval"`
-	DiscordNotifySnooze   int64  `json:"discordnotifysnooze"`
-	ErrorTolerance        int    `json:"errortolerance"`
+	WebHookUrl            string         `json:"webhookurl"`
+	MonitorInterval       int            `json:"interval"`
+	RegularReportInterval int            `json:"regularreportinterval"`
+	DiscordNotifySnooze   int64          `json:"discordnotifysnooze"`
+	ErrorTolerance        ErrorTolerance `json:"errortolerance"`
 }
 
 // FoundersNodes ...
@@ -70,8 +76,8 @@ func GetNodeConfig() (NodeConfig, error) {
 		config.Settings.DiscordNotifySnooze = 600
 	}
 
-	if config.Settings.ErrorTolerance == 0 {
-		config.Settings.ErrorTolerance = 3
+	if config.Settings.ErrorTolerance.Count == 0 {
+		config.Settings.ErrorTolerance.Count = 3
 	}
 
 	if config.Servers == nil {

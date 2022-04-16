@@ -4,7 +4,10 @@
         "monitorinterval" : 90,
         "regularreportinterval" : 3600,
         "discordnotifysnooze" : 600,
-        "errortolerance" : 3
+        "errortolerance" : {
+            "Count" : 3,
+            "Command" : "sudo reboot"
+        }
     },
     "servers" : [
         {

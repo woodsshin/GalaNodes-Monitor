@@ -44,7 +44,6 @@ type Status struct {
 	MsActiveToday        int    `json:"msActiveToday"`
 	LicenseCount         int    `json:"licenseCount"`
 	State                string
-	ErrorCount           int
 }
 
 type NodeStatus struct {
@@ -90,7 +89,6 @@ var (
 
 	nodeIdx   int
 	nodeTypes [2]string
-	nodeList  []NodeStatus
 	nodeMap   map[string]NodeStatus
 	alertMap  map[string]int64
 
@@ -202,14 +200,14 @@ func PrintSummary(discordReport bool) {
 	}
 }
 
-func printNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSettings, reason string) {
-	if len(reason) > 0 {
-		fmt.Printf("\n%v. %v(%v)%v\n", idx, nodesetting.Name, nodesetting.Address, reason)
-	}
-
+func reportNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSettings, reason string) {
 	// update node state
 	preNodeInfo := nodeMap[nodesetting.Address]
 	nodeInfo.Summary.ErrorCount = preNodeInfo.Summary.ErrorCount + 1
+
+	if len(reason) > 0 {
+		fmt.Printf("\n%v. %v(%v)%v error count %v\n", idx, nodesetting.Name, nodesetting.Address, reason, nodeInfo.Summary.ErrorCount)
+	}
 
 	nodeMap[nodesetting.Address] = nodeInfo
 
@@ -218,7 +216,7 @@ func printNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSet
 	}
 
 	// error tolerance
-	if nodeInfo.Summary.ErrorCount < nodeConfig.Settings.ErrorTolerance {
+	if nodeInfo.Summary.ErrorCount < nodeConfig.Settings.ErrorTolerance.Count {
 		return
 	}
 
@@ -226,38 +224,41 @@ func printNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSet
 	nodeInfo.Summary.ErrorCount = 0
 	nodeMap[nodesetting.Address] = nodeInfo
 
-	// update notify time
 	nextNotifyTime := alertMap[nodesetting.Address]
-	if nextNotifyTime > time.Now().UTC().Unix() {
-		return
-	}
+	if nextNotifyTime <= time.Now().UTC().Unix() {
+		// update notify time
+		alertMap[nodesetting.Address] = time.Now().UTC().Unix() + int64(nodeConfig.Settings.DiscordNotifySnooze)
 
-	alertMap[nodesetting.Address] = time.Now().UTC().Unix() + int64(nodeConfig.Settings.DiscordNotifySnooze)
-
-	var machineId string
-	if len(nodeInfo.Summary.MachineID) > 0 {
-		machineIds := strings.Split(nodeInfo.Summary.MachineID, ":")
-		machineId = machineIds[0]
-	}
-
-	// generate discord message
-	var nodes string
-	for _, nodeType := range nodeTypes {
-		v := nodeInfo.WorkloadsMap[nodeType]
-		if len(v.Name) == 0 {
-			continue
+		var machineId string
+		if len(nodeInfo.Summary.MachineID) > 0 {
+			machineIds := strings.Split(nodeInfo.Summary.MachineID, ":")
+			machineId = machineIds[0]
 		}
-		nodes += fmt.Sprintf("%v active : %v\\nLicenses : %v/%v\\nNode state : %v\\n\\n",
-			v.Name, getTimeStamp(v.MsActiveToday), v.MyWorkloadsOnline, v.LicenseCount, v.State)
+
+		// generate discord message
+		var nodes string
+		for _, nodeType := range nodeTypes {
+			v := nodeInfo.WorkloadsMap[nodeType]
+			if len(v.Name) == 0 {
+				continue
+			}
+			nodes += fmt.Sprintf("%v active : %v\\nLicenses : %v/%v\\nNode state : %v\\n\\n",
+				v.Name, getTimeStamp(v.MsActiveToday), v.MyWorkloadsOnline, v.LicenseCount, v.State)
+		}
+
+		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Online nodes : %v\\nLicenses count : %v\\nMachine ID : %v\\n\\n%v\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
+			nodeInfo.Summary.NodesOnline, nodeInfo.Summary.LicenseCount,
+			machineId, nodes,
+			idx, nodesetting.Name, nodesetting.Address,
+			nodeInfo.Summary.CurrentVersion, nodeInfo.Summary.State)
+
+		sendDiscordMessage(embedString)
 	}
 
-	embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Online nodes : %v\\nLicenses count : %v\\nMachine ID : %v\\n\\n%v\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
-		nodeInfo.Summary.NodesOnline, nodeInfo.Summary.LicenseCount,
-		machineId, nodes,
-		idx, nodesetting.Name, nodesetting.Address,
-		nodeInfo.Summary.CurrentVersion, nodeInfo.Summary.State)
-
-	sendDiscordMessage(embedString)
+	// run command if connection state is online
+	if nodeInfo.Summary.State == ConnectionOnline && len(nodeConfig.Settings.ErrorTolerance.Command) > 0 {
+		go runCustomCmd(idx, nodeConfig.Settings.ErrorTolerance.Command, nodesetting)
+	}
 }
 
 func sendDiscordMessage(embedString string) {
@@ -299,51 +300,6 @@ func PrintNodeInfo() {
 		log.Println("running nodes stats")
 	} else {
 		log.Printf("next nodes stats will run in %v seconds", nextQueryTime)
-	}
-}
-
-func RunNodeCmd(key string, cmd string) {
-	var (
-		nodeIdx     int
-		isKeyIdx    bool
-		nodesetting nodeconfig.NodeSettings
-	)
-	value, err := strconv.ParseInt(key, 10, 64)
-	if err != nil {
-		isKeyIdx = false
-	} else {
-		isKeyIdx = true
-		// non zero based index
-		nodeIdx = int(value) - 1
-	}
-
-	if strings.ToLower(key) == "all" {
-		log.Printf("N/A")
-	} else {
-		if isKeyIdx {
-			// index of nodes
-			if nodeIdx >= len(nodeConfig.Servers) {
-				log.Printf("failed to reboot node. not found key : %v", key)
-				return
-			}
-			nodesetting = nodeConfig.Servers[nodeIdx]
-		} else {
-			// find idx
-			var found bool
-			for idx, nodesetting := range nodeConfig.Servers {
-				if nodesetting.Address == key {
-					nodeIdx = idx
-					found = true
-					break
-				}
-			}
-			if found == false {
-				log.Printf("failed to reboot node. not found key : %v", key)
-				return
-			}
-		}
-
-		queryNode(nodeIdx, cmd, nodesetting, false, false)
 	}
 }
 
@@ -450,7 +406,6 @@ func SaveNodeInfo() {
 
 func QueryAllNodes(updateActiveTime bool) {
 	nodeIdx = 0
-	nodeList = make([]NodeStatus, 0)
 
 	len := len(nodeConfig.Servers)
 	log.Printf("running %v nodes stats", len)
@@ -459,7 +414,7 @@ func QueryAllNodes(updateActiveTime bool) {
 
 	for _, nodesetting := range nodeConfig.Servers {
 		nodeIdx++
-		go queryNode(nodeIdx, CmdStats, nodesetting, true, updateActiveTime)
+		go runNodeStats(nodeIdx, nodesetting, updateActiveTime)
 	}
 
 	wg.Wait()
@@ -475,31 +430,19 @@ func QueryAllNodes(updateActiveTime bool) {
 	PrintSummary(false)
 }
 
-func queryNode(idx int, cmd string, nodesetting nodeconfig.NodeSettings, wgCount bool, updateActiveTime bool) {
+func runSSHCmd(cmd string, nodesetting nodeconfig.NodeSettings) (bool, string, []byte) {
 	var (
-		err      error
-		auth     goph.Auth
-		client   *goph.Client
-		timeout  time.Duration
-		nodeInfo NodeStatus
+		err     error
+		auth    goph.Auth
+		client  *goph.Client
+		timeout time.Duration
 	)
-
-	if wgCount {
-		defer wg.Done()
-	}
-
-	// start progress
-	if updateActiveTime == false {
-		fmt.Printf(".")
-	}
 
 	if len(nodesetting.PrivateKeypath) != 0 {
 		auth, err = goph.Key(nodesetting.PrivateKeypath, getPassphrase(false))
 		if err != nil {
 			fmt.Printf("\nfailed to authenticate(PrivateKeypath) : %v", err)
-			nodeInfo.Summary.State = ConnectionFailedAuth
-			printNodeError(idx, nodeInfo, nodesetting, "failed to authenticate(PrivateKeypath)")
-			return
+			return false, ConnectionFailedAuth, nil
 		}
 	} else {
 		auth = goph.Password(nodesetting.Password)
@@ -515,10 +458,7 @@ func queryNode(idx int, cmd string, nodesetting nodeconfig.NodeSettings, wgCount
 
 	if err != nil {
 		fmt.Printf("\nfailed to connect SSH : %v", err)
-		nodeInfo.Summary.State = ConnectionOffline
-		nodeInfo.Summary.Desc = "failed to connect SSH"
-		printNodeError(idx, nodeInfo, nodesetting, "failed to connect SSH")
-		return
+		return false, ConnectionOffline, nil
 	}
 
 	// Close client net connection
@@ -536,38 +476,145 @@ func queryNode(idx int, cmd string, nodesetting nodeconfig.NodeSettings, wgCount
 
 	if err != nil {
 		fmt.Printf("\nfailed to run %v : %v", cmd, err)
-		nodeInfo.Summary.State = ConnectionFailedCmd
-		nodeInfo.Summary.Desc = fmt.Sprintf("failed to run %v", cmd)
-		printNodeError(idx, nodeInfo, nodesetting, nodeInfo.Summary.Desc)
+		return false, ConnectionFailedCmd, nil
+	}
+	return true, ConnectionOnline, out
+}
+
+func RunNodeCmd(key string, cmd string) {
+	var (
+		nodeIdx     int
+		isKeyIdx    bool
+		nodesetting nodeconfig.NodeSettings
+	)
+	value, err := strconv.ParseInt(key, 10, 64)
+	if err != nil {
+		isKeyIdx = false
+	} else {
+		isKeyIdx = true
+		// non zero based index
+		nodeIdx = int(value)
+	}
+
+	if strings.ToLower(key) == "all" {
+		log.Printf("N/A")
+	} else {
+		if isKeyIdx {
+			// index of nodes
+			if nodeIdx-1 >= len(nodeConfig.Servers) {
+				log.Printf("failed to reboot node. not found key : %v", key)
+				return
+			}
+			nodesetting = nodeConfig.Servers[nodeIdx-1]
+		} else {
+			// find idx
+			var found bool
+			for idx, nodesetting := range nodeConfig.Servers {
+				if nodesetting.Address == key {
+					nodeIdx = idx
+					found = true
+					break
+				}
+			}
+			if found == false {
+				log.Printf("failed to reboot node. not found key : %v", key)
+				return
+			}
+		}
+
+		runCustomCmd(nodeIdx, cmd, nodesetting)
+	}
+}
+
+func runCustomCmd(idx int, cmd string, nodesetting nodeconfig.NodeSettings) {
+	var (
+		nodeInfo NodeStatus
+	)
+
+	// run command via SSH
+	success, state, out := runSSHCmd(cmd, nodesetting)
+	if success == false {
+		reportNodeError(idx, nodeInfo, nodesetting, state)
+		return
+	}
+
+	// get cached node information
+	nodeInfo = nodeMap[nodesetting.Address]
+
+	if cmd == CmdRestartGalaNode {
+		fmt.Println("")
+
+		message := fmt.Sprintf("%v(%v) restarted", nodesetting.Name, nodesetting.Address)
+		log.Println(message)
+
+		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Restarted Gala nodes\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
+			idx, nodesetting.Name, nodesetting.Address,
+			nodeInfo.Summary.CurrentVersion, nodeInfo.Summary.State)
+
+		sendDiscordMessage(embedString)
+
+	} else if cmd == CmdReboot {
+		fmt.Println("")
+
+		message := fmt.Sprintf("%v(%v) rebooted", nodesetting.Name, nodesetting.Address)
+		log.Println(message)
+
+		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Rebooted operating system\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
+			idx, nodesetting.Name, nodesetting.Address,
+			nodeInfo.Summary.CurrentVersion, ConnectionRebooted)
+
+		sendDiscordMessage(embedString)
+
+		preNodeInfo := nodeMap[nodesetting.Address]
+		preNodeInfo.Summary.State = ConnectionRebooted
+		nodeMap[nodesetting.Address] = preNodeInfo
+	} else {
+		fmt.Println("")
+
+		message := fmt.Sprintf("%v(%v) : run command \"%v\"", nodesetting.Name, nodesetting.Address, cmd)
+		log.Println(message)
+		log.Printf("out : %v", string(out))
+
+		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"run command : %v\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
+			cmd, idx, nodesetting.Name, nodesetting.Address,
+			nodeInfo.Summary.CurrentVersion, ConnectionRebooted)
+
+		sendDiscordMessage(embedString)
+	}
+}
+
+func runNodeStats(idx int, nodesetting nodeconfig.NodeSettings, updateActiveTime bool) {
+	var (
+		nodeInfo NodeStatus
+	)
+
+	defer wg.Done()
+
+	// start progress
+	fmt.Printf(".")
+
+	// run command via SSH
+	success, state, out := runSSHCmd(CmdStats, nodesetting)
+	nodeInfo.Summary.State = state
+
+	if success == false {
+		reportNodeError(idx, nodeInfo, nodesetting, state)
 		return
 	}
 
 	// update stats after running gala-node stats
-	if cmd == CmdStats {
-		err = json.Unmarshal(out, &nodeInfo)
-		if err != nil {
-			fmt.Printf("\nfailed to parse stats json : %v", err)
-			nodeInfo.Summary.State = ConnectionFailedJsonParsing
-			nodeInfo.Summary.Desc = string(out)
-			printNodeError(idx, nodeInfo, nodesetting, string(out))
-			return
-		}
-		parseNodeStats(idx, nodeInfo, nodesetting, updateActiveTime)
+	err := json.Unmarshal(out, &nodeInfo)
+	if err != nil {
+		fmt.Printf("\nfailed to parse stats json : %v", err)
+		log.Println(string(out))
+		nodeInfo.Summary.State = ConnectionFailedJsonParsing
+		reportNodeError(idx, nodeInfo, nodesetting, ConnectionFailedJsonParsing)
+		return
 	}
+	parseNodeStats(idx, nodeInfo, nodesetting, updateActiveTime)
 
 	// end progress
 	fmt.Printf(".")
-
-	if cmd == CmdRestartGalaNode {
-		fmt.Println("")
-		log.Printf("restarted %v(%v)", nodesetting.Name, nodesetting.Address)
-	} else if cmd == CmdReboot {
-		fmt.Println("")
-		log.Printf("rebooted %v(%v)", nodesetting.Name, nodesetting.Address)
-		preNodeInfo := nodeMap[nodesetting.Address]
-		preNodeInfo.Summary.State = ConnectionRebooted
-		nodeMap[nodesetting.Address] = preNodeInfo
-	}
 }
 
 func hasNodes(nodeType string, nodesetting nodeconfig.NodeSettings) bool {
@@ -581,12 +628,15 @@ func hasNodes(nodeType string, nodesetting nodeconfig.NodeSettings) bool {
 
 func parseNodeStats(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSettings, updateActiveTime bool) {
 
+	var (
+		hasError bool
+		reason   string
+	)
 	nodeInfo.Summary.State = ConnectionOnline
 
 	preNodeInfo := nodeMap[nodesetting.Address]
 
 	// update nodes state
-	hasError := false
 	for _, v := range nodeInfo.Workloads {
 		// check tracking nodes are running on this server
 		if !hasNodes(v.Name, nodesetting) {
@@ -607,6 +657,7 @@ func parseNodeStats(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSet
 			if updateActiveTime {
 				if status.MsActiveToday == v.MsActiveToday {
 					v.State = NodeStateInActive
+					reason = NodeStateInActive
 				}
 			} else {
 				// not update active time. run by command
@@ -617,15 +668,11 @@ func parseNodeStats(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSet
 			if v.MyWorkloadsOnline < v.LicenseCount {
 				if nodeInfo.Summary.State == NodeStateOnline {
 					v.State = NodeStateLessNodesRunning
+					reason = NodeStateLessNodesRunning
 				}
 			}
 			if v.State != NodeStateOnline {
-				// check errortolerance
-				v.ErrorCount = status.ErrorCount + 1
-				if v.ErrorCount >= nodeConfig.Settings.ErrorTolerance {
-					hasError = true
-					v.ErrorCount = 0
-				}
+				hasError = true
 			}
 		}
 
@@ -633,12 +680,12 @@ func parseNodeStats(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSet
 		//log.Printf("%v. %v(%v) %v %v", k, nodesetting.Name, nodesetting.Address, v.Name, getTimeStamp(v.MsActiveToday))
 	}
 
-	// cache node information
-	nodeList = append(nodeList, nodeInfo)
-	nodeMap[nodesetting.Address] = nodeInfo
-
 	if hasError {
-		printNodeError(idx, nodeInfo, nodesetting, "")
+		// report error
+		reportNodeError(idx, nodeInfo, nodesetting, reason)
+	} else {
+		// cache node information
+		nodeMap[nodesetting.Address] = nodeInfo
 	}
 }
 
