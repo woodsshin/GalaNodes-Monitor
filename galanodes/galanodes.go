@@ -1,5 +1,5 @@
 // Copyright 2020-present woodsshin. All rights reserved.
-// Use of this source code is governed by GNU General Public License v2.0.
+// Use of this source code is governed by MIT license.
 
 package galanodes
 
@@ -206,10 +206,23 @@ func reportNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSe
 	nodeInfo.Summary.ErrorCount = preNodeInfo.Summary.ErrorCount + 1
 
 	if len(reason) > 0 {
-		fmt.Printf("\n%v. %v(%v) %v error count %v\n", idx, nodesetting.Name, nodesetting.Address, reason, nodeInfo.Summary.ErrorCount)
+		logmsg := fmt.Sprintf("%v. %v(%v) %v error count %v", idx, nodesetting.Name, nodesetting.Address, reason, nodeInfo.Summary.ErrorCount)
+		fmt.Printf("\n%v\n", logmsg)
+		WriteLog(logmsg)
 	}
 
 	nodeMap[nodesetting.Address] = nodeInfo
+
+	// print log
+	for _, nodeType := range nodeTypes {
+		v := nodeInfo.WorkloadsMap[nodeType]
+		if len(v.Name) == 0 {
+			continue
+		}
+		logmsg := fmt.Sprintf("%v active : %v Licenses : %v/%v Node state : %v",
+			v.Name, getTimeStamp(v.MsActiveToday), v.MyWorkloadsOnline, v.LicenseCount, v.State)
+		WriteLog(logmsg)
+	}
 
 	if len(nodeConfig.Settings.WebHookUrl) == 0 {
 		return
@@ -236,7 +249,7 @@ func reportNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSe
 		}
 
 		// generate discord message
-		var nodes string
+		nodes := fmt.Sprintf("UTC %v\\n\\n", time.Now().UTC().Format("2006-01-02 15:04:05"))
 		for _, nodeType := range nodeTypes {
 			v := nodeInfo.WorkloadsMap[nodeType]
 			if len(v.Name) == 0 {
@@ -246,7 +259,7 @@ func reportNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSe
 				v.Name, getTimeStamp(v.MsActiveToday), v.MyWorkloadsOnline, v.LicenseCount, v.State)
 		}
 
-		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Online nodes : %v\\nLicenses count : %v\\nMachine ID : %v\\n\\n%v\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
+		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"Online nodes : %v/%v\\nMachine ID : %v\\n\\n%v\",\"author\":{\"name\":\"%v. %v(%v) ver %v connection state : %v\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":15158332}]}",
 			nodeInfo.Summary.NodesOnline, nodeInfo.Summary.LicenseCount,
 			machineId, nodes,
 			idx, nodesetting.Name, nodesetting.Address,
@@ -274,6 +287,7 @@ func sendDiscordMessage(embedString string) {
 }
 
 func PrintNodeInfo() {
+	log.Printf("UTC %v", time.Now().UTC().Format("2006-01-02 15:04:05.000"))
 	idx := 1
 	for _, nodesettings := range nodeConfig.Servers {
 		nodeInfo := nodeMap[nodesettings.Address]
@@ -304,6 +318,8 @@ func PrintNodeInfo() {
 }
 
 func FindNode(key string) {
+	log.Printf("UTC %v", time.Now().UTC().Format("2006-01-02 15:04:05.000"))
+
 	idx := 0
 	foundNodes := 0
 	for _, nodesettings := range nodeConfig.Servers {
@@ -688,7 +704,7 @@ func parseNodeStats(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSet
 
 func getTimeStamp(activeTime int) string {
 	sec := activeTime / 1000
-	timeStamp := fmt.Sprintf("%02dh %02dm %02ds", sec/60/60, sec/60%60, sec%60)
+	timeStamp := fmt.Sprintf("%02d:%02d:%02d", sec/60/60, sec/60%60, sec%60)
 	return timeStamp
 }
 

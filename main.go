@@ -1,5 +1,5 @@
 // Copyright 2020-present woodsshin. All rights reserved.
-// Use of this source code is governed by GNU General Public License v2.0.
+// Use of this source code is governed by MIT license.
 
 package main
 
@@ -42,6 +42,8 @@ func Init() {
 	fmt.Println("*** Welcome To Gala node monitor ***")
 
 	printHelp()
+
+	galanodes.WriteLog("*** Started monitoring ***")
 }
 
 func main() {
