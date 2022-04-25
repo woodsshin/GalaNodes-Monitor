@@ -21,6 +21,7 @@ type BaseSettings struct {
 	MonitorInterval       int            `json:"interval"`
 	RegularReportInterval int            `json:"regularreportinterval"`
 	DiscordNotifySnooze   int64          `json:"discordnotifysnooze"`
+	WebsocketPort         int64          `json:"websocketport"`
 	ErrorTolerance        ErrorTolerance `json:"errortolerance"`
 }
 
@@ -74,6 +75,10 @@ func GetNodeConfig() (NodeConfig, error) {
 
 	if config.Settings.DiscordNotifySnooze == 0 {
 		config.Settings.DiscordNotifySnooze = 600
+	}
+
+	if config.Settings.WebsocketPort == 0 {
+		config.Settings.WebsocketPort = 8080
 	}
 
 	if config.Settings.ErrorTolerance.Count == 0 {

@@ -5,8 +5,10 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -15,16 +17,32 @@ import (
 	"time"
 
 	"galamonitor/galanodes"
+	"galamonitor/web"
 )
 
 var (
 	clear map[string]func() //create a map for storing clear funcs
 
 	wg sync.WaitGroup
+
+	addr *string
 )
+
+func serveHome(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	http.ServeFile(w, r, "web/home.html")
+}
 
 func Init() {
 
+	// load configuration
 	galanodes.Init()
 
 	clear = make(map[string]func()) //Initialize it
@@ -54,12 +72,31 @@ func main() {
 
 	go galanodes.RegularReport()
 
-	for {
+	go func() {
 		galanodes.QueryAllNodes(true)
 
 		var duration time.Duration
 		duration = time.Duration(galanodes.GetMonitorInterval())
 		time.Sleep(duration * time.Second)
+	}()
+
+	// run websocket server
+	flag.Parse()
+	hub := web.NewHub()
+	go hub.Run()
+
+	http.HandleFunc("/", serveHome)
+
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		web.ServeWs(hub, w, r)
+	})
+
+	port := fmt.Sprintf(":%v", galanodes.GetWebsocketPort())
+
+	addr = flag.String("addr", port, "http service address")
+	err := http.ListenAndServe(*addr, nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
 	}
 }
 
@@ -141,7 +178,10 @@ loop:
 			if len(parts) == 1 {
 				log.Printf("Please pass a node index or addres, all with reboot command.")
 			} else {
-				galanodes.RunNodeCmd(parts[1], galanodes.CmdReboot)
+				err := galanodes.RunNodeCmd(parts[1], galanodes.CmdReboot)
+				if err != nil {
+					log.Println(err)
+				}
 			}
 			break
 
@@ -157,7 +197,10 @@ loop:
 			if len(parts) == 1 {
 				log.Printf("Please pass a node index or addres with restart command.")
 			} else {
-				galanodes.RunNodeCmd(parts[1], galanodes.CmdRestartGalaNode)
+				err := galanodes.RunNodeCmd(parts[1], galanodes.CmdRestartGalaNode)
+				if err != nil {
+					log.Println(err)
+				}
 			}
 			break
 

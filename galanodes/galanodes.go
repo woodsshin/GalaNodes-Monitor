@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -114,6 +115,10 @@ func Init() {
 
 func GetMonitorInterval() int {
 	return nodeConfig.Settings.MonitorInterval
+}
+
+func GetWebsocketPort() int {
+	return int(nodeConfig.Settings.WebsocketPort)
 }
 
 func RegularReport() {
@@ -287,11 +292,15 @@ func sendDiscordMessage(embedString string) {
 }
 
 func PrintNodeInfo() {
-	log.Printf("UTC %v", time.Now().UTC().Format("2006-01-02 15:04:05.000"))
+	log.Printf(fmt.Sprintf("UTC %v\n%v", time.Now().UTC().Format("2006-01-02 15:04:05.000"), GetNodeInfo()))
+}
+
+func GetNodeInfo() string {
+	var str string
 	idx := 1
 	for _, nodesettings := range nodeConfig.Servers {
 		nodeInfo := nodeMap[nodesettings.Address]
-		fmt.Printf("%v. %v(%v) licenses %v/%v state %v ver %v %v\n",
+		str += fmt.Sprintf("%v. %v(%v) licenses %v/%v state %v ver %v %v\n",
 			idx, nodesettings.Name, nodesettings.Address,
 			nodeInfo.Summary.NodesOnline, nodeInfo.Summary.LicenseCount, nodeInfo.Summary.State,
 			nodeInfo.Summary.CurrentVersion, nodeInfo.Summary.MachineID)
@@ -301,24 +310,30 @@ func PrintNodeInfo() {
 			if len(v.Name) == 0 {
 				continue
 			}
-			fmt.Printf("%v active : %v licenses : %v/%v state : %v\n",
+			str += fmt.Sprintf("%v active : %v licenses : %v/%v state : %v\n",
 				v.Name, getTimeStamp(v.MsActiveToday), v.MyWorkloadsOnline, v.LicenseCount, v.State)
 		}
-		fmt.Println("")
+		str += "\n"
 		idx++
 	}
 
 	nextQueryTime := int64(nodeConfig.Settings.MonitorInterval) - (time.Now().UTC().Unix() - lastQueryTime)
 
 	if nextQueryTime <= 0 {
-		log.Println("running nodes stats")
+		str += fmt.Sprintf("running nodes stats")
 	} else {
-		log.Printf("next nodes stats will run in %v seconds", nextQueryTime)
+		str += fmt.Sprintf("next nodes stats will run in %v seconds", nextQueryTime)
 	}
+
+	return str
 }
 
 func FindNode(key string) {
-	log.Printf("UTC %v", time.Now().UTC().Format("2006-01-02 15:04:05.000"))
+	log.Printf(fmt.Sprintf("UTC %v\n%v", time.Now().UTC().Format("2006-01-02 15:04:05.000"), FindNodeInfo(key)))
+}
+
+func FindNodeInfo(key string) string {
+	var str string
 
 	idx := 0
 	foundNodes := 0
@@ -340,7 +355,7 @@ func FindNode(key string) {
 
 		foundNodes++
 
-		fmt.Printf("%v. %v(%v) licenses %v/%v state %v ver %v %v\n",
+		str += fmt.Sprintf("%v. %v(%v) licenses %v/%v state %v ver %v %v\n",
 			idx, nodesettings.Name, nodesettings.Address,
 			nodeInfo.Summary.NodesOnline, nodeInfo.Summary.LicenseCount, nodeInfo.Summary.State,
 			nodeInfo.Summary.CurrentVersion, nodeInfo.Summary.MachineID)
@@ -350,13 +365,15 @@ func FindNode(key string) {
 			if len(v.Name) == 0 {
 				continue
 			}
-			fmt.Printf("%v active : %v licenses : %v/%v state : %v\n",
+			str += fmt.Sprintf("%v active : %v licenses : %v/%v state : %v\n",
 				v.Name, getTimeStamp(v.MsActiveToday), v.MyWorkloadsOnline, v.LicenseCount, v.State)
 		}
-		fmt.Println("")
+		str += "\n"
 	}
 
-	log.Printf("found %v nodes.", foundNodes)
+	str += fmt.Sprintf("found %v nodes.", foundNodes)
+
+	return str
 }
 
 func SaveNodeInfo() {
@@ -446,7 +463,7 @@ func QueryAllNodes(updateActiveTime bool) {
 	PrintSummary(false)
 }
 
-func runSSHCmd(cmd string, nodesetting nodeconfig.NodeSettings) (bool, string, []byte) {
+func runSSHCmd(cmd string, nodesetting nodeconfig.NodeSettings) (error, string, []byte) {
 	var (
 		err     error
 		auth    goph.Auth
@@ -458,7 +475,7 @@ func runSSHCmd(cmd string, nodesetting nodeconfig.NodeSettings) (bool, string, [
 		auth, err = goph.Key(nodesetting.PrivateKeypath, getPassphrase(false))
 		if err != nil {
 			fmt.Printf("\nfailed to authenticate(PrivateKeypath) : %v", err)
-			return false, ConnectionFailedAuth, nil
+			return err, ConnectionFailedAuth, nil
 		}
 	} else {
 		auth = goph.Password(nodesetting.Password)
@@ -474,7 +491,7 @@ func runSSHCmd(cmd string, nodesetting nodeconfig.NodeSettings) (bool, string, [
 
 	if err != nil {
 		fmt.Printf("\nfailed to connect SSH : %v", err)
-		return false, ConnectionOffline, nil
+		return err, ConnectionOffline, nil
 	}
 
 	// Close client net connection
@@ -492,12 +509,12 @@ func runSSHCmd(cmd string, nodesetting nodeconfig.NodeSettings) (bool, string, [
 
 	if err != nil {
 		fmt.Printf("\nfailed to run %v : %v", cmd, err)
-		return false, ConnectionFailedCmd, nil
+		return err, ConnectionFailedCmd, nil
 	}
-	return true, ConnectionOnline, out
+	return nil, ConnectionOnline, out
 }
 
-func RunNodeCmd(key string, cmd string) {
+func RunNodeCmd(key string, cmd string) error {
 	var (
 		nodeIdx     int
 		isKeyIdx    bool
@@ -513,45 +530,43 @@ func RunNodeCmd(key string, cmd string) {
 	}
 
 	if strings.ToLower(key) == "all" {
-		log.Printf("N/A")
+		return errors.New("Not Available")
+	}
+
+	if isKeyIdx {
+		// index of nodes
+		if nodeIdx-1 >= len(nodeConfig.Servers) {
+			return errors.New(fmt.Sprintf("failed to reboot node. not found key : %v", key))
+		}
+		nodesetting = nodeConfig.Servers[nodeIdx-1]
 	} else {
-		if isKeyIdx {
-			// index of nodes
-			if nodeIdx-1 >= len(nodeConfig.Servers) {
-				log.Printf("failed to reboot node. not found key : %v", key)
-				return
-			}
-			nodesetting = nodeConfig.Servers[nodeIdx-1]
-		} else {
-			// find idx
-			var found bool
-			for idx, nodesetting := range nodeConfig.Servers {
-				if nodesetting.Address == key {
-					nodeIdx = idx
-					found = true
-					break
-				}
-			}
-			if found == false {
-				log.Printf("failed to reboot node. not found key : %v", key)
-				return
+		// find idx
+		var found bool
+		for idx, nodesetting := range nodeConfig.Servers {
+			if nodesetting.Address == key {
+				nodeIdx = idx
+				found = true
+				break
 			}
 		}
-
-		runCustomCmd(nodeIdx, cmd, nodesetting)
+		if found == false {
+			return errors.New(fmt.Sprintf("failed to reboot node. not found key : %v", key))
+		}
 	}
+
+	return runCustomCmd(nodeIdx, cmd, nodesetting)
 }
 
-func runCustomCmd(idx int, cmd string, nodesetting nodeconfig.NodeSettings) {
+func runCustomCmd(idx int, cmd string, nodesetting nodeconfig.NodeSettings) error {
 	var (
 		nodeInfo NodeStatus
 	)
 
 	// run command via SSH
-	success, state, out := runSSHCmd(cmd, nodesetting)
-	if success == false {
+	err, state, out := runSSHCmd(cmd, nodesetting)
+	if err != nil {
 		reportNodeError(idx, nodeInfo, nodesetting, state)
-		return
+		return err
 	}
 
 	// get cached node information
@@ -594,9 +609,11 @@ func runCustomCmd(idx int, cmd string, nodesetting nodeconfig.NodeSettings) {
 
 		sendDiscordMessage(embedString)
 	}
+
+	return nil
 }
 
-func runNodeStats(idx int, nodesetting nodeconfig.NodeSettings, updateActiveTime bool) {
+func runNodeStats(idx int, nodesetting nodeconfig.NodeSettings, updateActiveTime bool) error {
 	var (
 		nodeInfo NodeStatus
 	)
@@ -607,27 +624,29 @@ func runNodeStats(idx int, nodesetting nodeconfig.NodeSettings, updateActiveTime
 	fmt.Printf(".")
 
 	// run command via SSH
-	success, state, out := runSSHCmd(CmdStats, nodesetting)
+	err, state, out := runSSHCmd(CmdStats, nodesetting)
 	nodeInfo.Summary.State = state
 
-	if success == false {
+	if err != nil {
 		reportNodeError(idx, nodeInfo, nodesetting, state)
-		return
+		return err
 	}
 
 	// update stats after running gala-node stats
-	err := json.Unmarshal(out, &nodeInfo)
+	err = json.Unmarshal(out, &nodeInfo)
 	if err != nil {
 		fmt.Printf("\nfailed to parse stats json : %v", err)
 		log.Println(string(out))
 		nodeInfo.Summary.State = ConnectionFailedJsonParsing
 		reportNodeError(idx, nodeInfo, nodesetting, ConnectionFailedJsonParsing)
-		return
+		return err
 	}
 	parseNodeStats(idx, nodeInfo, nodesetting, updateActiveTime)
 
 	// end progress
 	fmt.Printf(".")
+
+	return nil
 }
 
 func hasNodes(nodeType string, nodesetting nodeconfig.NodeSettings) bool {

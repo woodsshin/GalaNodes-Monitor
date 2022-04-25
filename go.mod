@@ -3,6 +3,7 @@ module galamonitor
 go 1.13
 
 require (
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/melbahja/goph v1.3.0
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/sftp v1.13.4
