@@ -73,11 +73,13 @@ func main() {
 	go galanodes.RegularReport()
 
 	go func() {
-		galanodes.QueryAllNodes(true)
+		for {
+			galanodes.QueryAllNodes(true)
 
-		var duration time.Duration
-		duration = time.Duration(galanodes.GetMonitorInterval())
-		time.Sleep(duration * time.Second)
+			var duration time.Duration
+			duration = time.Duration(galanodes.GetMonitorInterval())
+			time.Sleep(duration * time.Second)
+		}
 	}()
 
 	// run websocket server
