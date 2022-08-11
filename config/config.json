@@ -17,7 +17,7 @@
             "username" : "ubuntu",
             "password" : "",
             "privatekeypath" : "",
-            "nodes" : ["founders", "townstar"]
+            "nodes" : ["founders", "townstar", "player"]
         },
         {
             "name" : "your server name 2",
@@ -26,7 +26,7 @@
             "username" : "ubuntu",
             "password" : "",
             "privatekeypath" : "",
-            "nodes" : ["founders", "townstar"]
+            "nodes" : ["player"]
         }
     ]
 }

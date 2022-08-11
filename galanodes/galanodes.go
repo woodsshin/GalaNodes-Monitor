@@ -65,6 +65,7 @@ const (
 const (
 	NodeTypeFounders string = "founders"
 	NodeTypeTownStar string = "townstar"
+	NodeTypePlayer   string = "player"
 )
 
 const (
@@ -75,7 +76,7 @@ const (
 )
 
 const (
-	CmdStats           string = "gala-node stats | jq"
+	CmdStats           string = "sudo gala-node stats | jq"
 	CmdConfigDevice    string = "gala-node config device"
 	CmdRestartGalaNode string = "sudo systemctl restart gala-node"
 	CmdRestartService  string = "sudo systemctl restart gala-node.service"
@@ -89,7 +90,7 @@ var (
 	clear map[string]func() //create a map for storing clear funcs
 
 	nodeIdx   int
-	nodeTypes [2]string
+	nodeTypes [3]string
 	nodeMap   map[string]NodeStatus
 	alertMap  map[string]int64
 
@@ -111,6 +112,7 @@ func Init() {
 	// this is to display nodes in order. new node has to be added to nodeTypes.
 	nodeTypes[0] = NodeTypeFounders
 	nodeTypes[1] = NodeTypeTownStar
+	nodeTypes[2] = NodeTypePlayer
 }
 
 func GetMonitorInterval() int {
@@ -138,10 +140,16 @@ func PrintSummary(discordReport bool) {
 		offlineFoundersNodes     int
 		monitoringFoundersNodes  int
 		totalOnlineFoundersNodes int
-		onlineTownNodes          int
-		offlineTownNodes         int
-		monitoringTownNodes      int
-		totalOnlineTownNodes     int
+
+		onlineTownNodes      int
+		offlineTownNodes     int
+		monitoringTownNodes  int
+		totalOnlineTownNodes int
+
+		onlinePlayerNodes      int
+		offlinePlayerNodes     int
+		monitoringPlayerNodes  int
+		totalOnlinePlayerNodes int
 	)
 
 	color := 0
@@ -155,6 +163,9 @@ func PrintSummary(discordReport bool) {
 				break
 			case NodeTypeTownStar:
 				monitoringTownNodes++
+				break
+			case NodeTypePlayer:
+				monitoringPlayerNodes++
 				break
 			}
 		}
@@ -183,20 +194,32 @@ func PrintSummary(discordReport bool) {
 					color = 15158332
 				}
 				break
+			case NodeTypePlayer:
+				if v.State == NodeStateOnline {
+					onlinePlayerNodes++
+					totalOnlinePlayerNodes = v.TotalWorkloadsOnline
+				} else {
+					offlinePlayerNodes++
+					color = 15158332
+				}
+				break
 			}
 
 		}
 	}
-	report := fmt.Sprintf("founders : %v/%v total online nodes : %v\ttownstar : %v/%v total online nodes : %v",
+	report := fmt.Sprintf("founders : %v/%v total online : %v\ttownstar : %v/%v total online : %v\tplayer : %v/%v total online : %v",
 		onlineFoundersNodes, monitoringFoundersNodes, totalOnlineFoundersNodes,
-		onlineTownNodes, monitoringTownNodes, totalOnlineTownNodes)
+		onlineTownNodes, monitoringTownNodes, totalOnlineTownNodes,
+		onlinePlayerNodes, monitoringPlayerNodes, totalOnlinePlayerNodes)
 
 	log.Println(report)
 
 	if discordReport {
-		report = fmt.Sprintf("founders : %v/%v online nodes : %v\\ntownstar : %v/%v online nodes : %v",
+		report = fmt.Sprintf("founders : %v/%v online : %v\\ntownstar : %v/%v online : %v\\nplayer : %v/%v online : %v",
 			onlineFoundersNodes, monitoringFoundersNodes, totalOnlineFoundersNodes,
-			onlineTownNodes, monitoringTownNodes, totalOnlineTownNodes)
+			onlineTownNodes, monitoringTownNodes, totalOnlineTownNodes,
+			onlinePlayerNodes, monitoringPlayerNodes, totalOnlinePlayerNodes,
+		)
 
 		embedString := fmt.Sprintf("{\"embeds\":[{\"title\": \"%v\",\"author\":{\"name\":\"Nodes report\",\"icon_url\":\"https://app.gala.games/_nuxt/img/icon_gala_cube.a0b796d.png\"},\"color\":%v}]}",
 			report, color)
@@ -282,6 +305,9 @@ func reportNodeError(idx int, nodeInfo NodeStatus, nodesetting nodeconfig.NodeSe
 func sendDiscordMessage(embedString string) {
 	var jsonStr = []byte(embedString)
 	req, err := http.NewRequest("POST", nodeConfig.Settings.WebHookUrl, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		return
+	}
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
 	resp, err := client.Do(req)
